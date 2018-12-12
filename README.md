@@ -2,5 +2,5 @@
 
 Concourse samples and patterns.
 
-## Conditional execution
+- [Conditional execution](conditional/README.md)
 
