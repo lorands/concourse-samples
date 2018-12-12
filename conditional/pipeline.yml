@@ -1,0 +1,91 @@
+---
+resources:
+- name: s3-yes
+  type: s3
+  source:
+    bucket: concourse-build
+    versioned_file: sample/yes.txt
+    access_key_id: ((aws-access-key-id))
+    secret_access_key: ((aws-secret-access-key))
+    region_name: eu-west-1
+- name: s3-no
+  type: s3
+  source:
+    bucket: concourse-build
+    versioned_file: sample/no.txt
+    access_key_id: ((aws-access-key-id))
+    secret_access_key: ((aws-secret-access-key))
+    region_name: eu-west-1
+
+jobs:
+- name: conditional
+  plan:
+  - task: check-condition
+    config:
+      platform: linux
+      image_resource:
+        type: docker-image
+        source:
+          repository: concourse/buildroot
+          tag: git
+      outputs:
+      - name: test-result
+      run:
+        path: sh
+        args:
+        - -exc
+        - |
+          ts=$(date +"%s"); m=$(($ts % 2)); if [ "$m" == 0 ]; then echo "no" > test-result/no.txt ; else echo "yes" > test-result/yes.txt; fi
+    on_success:
+      try:
+        aggregate:
+        - put: s3-yes
+          params:
+            file: test-result/yes.txt
+        - put: s3-no
+          params:
+            file: test-result/no.txt
+- name: runs-if-true
+  plan:
+  - get: s3-yes
+    trigger: true
+    passed:
+    - conditional
+  - task: is-true
+    config:
+      platform: linux
+      image_resource:
+        type: docker-image
+        source:
+          repository: concourse/buildroot
+          tag: git
+      outputs:
+      - name: test-result
+      run:
+        path: sh
+        args:
+        - -exc
+        - |
+          echo "TRUE"
+- name: runs-if-false
+  plan:
+  - get: s3-no
+    trigger: true
+    passed:
+    - conditional
+  - task: is-true
+    config:
+      platform: linux
+      image_resource:
+        type: docker-image
+        source:
+          repository: concourse/buildroot
+          tag: git
+      outputs:
+      - name: test-result
+      run:
+        path: sh
+        args:
+        - -exc
+        - |
+          echo "NO"
