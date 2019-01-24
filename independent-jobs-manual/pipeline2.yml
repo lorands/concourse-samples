@@ -1,0 +1,119 @@
+---
+resource_types:
+- name: cf-cli-resource
+  type: docker-image
+  source:
+    repository: nulldriver/cf-cli-resource
+    tag: latest
+- name: terraform
+  type: docker-image
+  source:
+    repository: ljfranklin/terraform-resource
+
+resources:
+- name: pws-cf-env
+  type: cf-cli-resource
+  source:
+    api: {{pws-api}}
+    username: ((pws-user))
+    password: ((pws-pass))
+    org: {{pws-org}}
+    space: {{pws-space}}
+- name: env-code
+  type: git
+  source:
+    uri: git@github.com:me/myprject.git
+    branch: develop
+    username: ((git-user))
+    private_key: |
+      ((git-private-key))
+
+- name: terraform
+  type: terraform
+  source:
+    storage:
+      bucket: my-terraform
+      bucket_path: terraform-ci/myproject/
+      access_key_id: ((aws-access-key-id))
+      secret_access_key: ((aws-secret-access-key))
+      region_name: eu-west-1
+    vars:
+      tag_name: concourse
+    env:
+      AWS_ACCESS_KEY_ID: ((aws-access-key-id))
+      AWS_SECRET_ACCESS_KEY: ((aws-secret-access-key))
+- name: trigger-every-3-minutes
+  type: time
+  source:
+    interval: 3m
+
+jobs:
+- name: setup-cf
+  serial: true
+  plan:
+  - get: trigger-every-3-minutes
+
+- name: setup-cf-pg
+  plan:
+  - get: trigger-every-3-minutes
+    trigger: true
+    passed: [setup-cf]
+
+  - put: cf-create-service
+    resource: pws-cf-env
+    params:
+      command: create-service
+      service: elephantsql
+      plan: turtle
+      service_instance: pg-myproject
+      tags: 'pg-database, rdbs'
+      wait_for_service: false
+
+- name: setup-s3-bucket
+  plan:
+  - get: trigger-every-3-minutes
+    trigger: true
+    passed: [setup-cf]
+
+  - get: env-code
+  - put: s3-with-terraform-plan
+    resource: terraform
+    params:
+      terraform_source: env-code/terraform-source
+      plan_only: true
+      env_name: staging
+
+  - put: s3-with-terraform-apply
+    resource: terraform
+    params:
+      terraform_source: env-code/terraform-source
+      env_name: staging
+      plan_run: true
+      vars:
+        s3_user_name: ((s3-user-name))
+        target_environment: ((target-env))
+
+  - put: cf-ups
+    resource: pws-cf-env
+    params:
+      commands:
+      # inline json
+      - command: create-user-provided-service
+        service_instance: myproject-bucket-ups
+        credentials: s3-with-terraform-apply/metadata
+      - command: create-user-provided-service
+        service_instance: myproject-ups
+        credentials: '{"key1": "val1", "key2": "val2" }'
+- name: setup-smtp-cups
+  plan:
+  - get: trigger-every-3-minutes
+    trigger: true
+    passed: [setup-cf]
+
+  - put: cf-ups
+    resource: pws-cf-env
+    params:
+      commands:
+      - command: create-user-provided-service
+        service_instance: myproject-smtp
+        credentials: '{"host": {{smtp-host}}, "port": {{smtp-port}}, "user": {{smtp-user}}, "pass": {{smtp-pass}}, "protocol": {{smtp-protocol}}, "starttls": {{smtp-starttls}}, "debug": {{smtp-debug}} }'

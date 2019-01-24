@@ -1,0 +1,27 @@
+---
+resources:
+- name: trigger-every-3-minutes
+  type: time
+  source:
+    interval: 3m
+
+jobs:
+- name: setup-env
+  plan:
+  - get: trigger-every-3-minutes
+
+- name: setup-job1
+  plan:
+  - get: trigger-every-3-minutes
+    trigger: true
+    passed: [setup-env]
+  # the real job to do comes here
+
+- name: setup-job2
+  plan:
+  - get: trigger-every-3-minutes
+    trigger: true
+    passed: [setup-env]
+
+  # the real job to do comes here
+
