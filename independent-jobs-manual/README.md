@@ -32,7 +32,6 @@ does not triggers and all the others are dependent of the first job.
 
 ```yml
 ---
----
 resources:
 - name: trigger-every-3-minutes
   type: time
@@ -60,5 +59,5 @@ jobs:
   # the real job to do comes here
 ```
 
-For a more complex hands on exemple extracted from one of my pipelines check [Hands on pipeline](pipeline2.xml). It creates 
+For a more complex hands on exemple extracted from one of my pipelines check [Hands on pipeline](pipeline2.yml). It creates 
 some resources is PWS and uses terraform to provision a S3 (terraform source not provided).
